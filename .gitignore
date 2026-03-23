@@ -37,3 +37,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# project specific
+backend/test.js
+backend/debug.log
+.vscode/
+.idea/
