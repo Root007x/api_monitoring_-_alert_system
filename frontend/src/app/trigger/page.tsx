@@ -135,7 +135,7 @@ export default function TriggerMonitorPage() {
               <p className="text-xs text-gray-400">
                 POST →{" "}
                 <code className="text-gray-500">
-                  http://localhost:5678/webhook/monitor
+                  https://hasan007.app.n8n.cloud/webhook-test/monitor
                 </code>
               </p>
               <Button

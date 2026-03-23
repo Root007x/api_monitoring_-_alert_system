@@ -2,14 +2,14 @@ import axios from "axios";
 import type { Alert, MonitorEntry, MonitorResponse, ResolveResponse } from "@/types";
 
 const WEBHOOK_BASE = "https://hasan007.app.n8n.cloud/webhook-test";
-const INTERNAL_BASE = "https://hasan007.app.n8n.cloud/webhook-test";
+const INTERNAL_BASE = "http://localhost:5000";
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
 
 export async function fetchAlerts(): Promise<Alert[]> {
   try {
     const { data } = await axios.get<any>(
-      `${WEBHOOK_BASE}/alerts`
+      `${INTERNAL_BASE}/alerts`
     );
     
     if (!data) return [];

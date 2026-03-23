@@ -25,9 +25,31 @@ import {
   Clock,
   RefreshCw,
   CheckCheck,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+// ── Helper ────────────────────────────────────────────────────────────────────
+
+function getAlertSeverity(alert: Alert): Severity {
+  if (alert.severity) return (alert.severity.toLowerCase() || 'low') as Severity;
+  if (!alert.issues || alert.issues.length === 0) return 'low';
+  
+  const levels: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+  let maxSev: Severity = 'low';
+  let maxScore = 0;
+  
+  for (const issue of alert.issues) {
+    const s = issue.severity?.toLowerCase() || 'low';
+    const score = levels[s] || 1;
+    if (score > maxScore) {
+       maxScore = score;
+       maxSev = s as Severity;
+    }
+  }
+  return maxSev;
+}
 
 // ── Severity card config ──────────────────────────────────────────────────────
 
@@ -96,6 +118,7 @@ function TableSkeleton() {
 export default function DashboardPage() {
   const qc = useQueryClient();
   const [accumulatedAlerts, setAccumulatedAlerts] = useState<Alert[]>([]);
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
   const {
     data: fetchedAlerts = [],
@@ -115,9 +138,9 @@ export default function DashboardPage() {
     if (fetchedAlerts.length > 0) {
       setAccumulatedAlerts((prev) => {
         // Prevent duplicate alerts from stacking up (unique by api_name + timestamp)
-        const prevKeys = new Set(prev.map((a) => `${a.api_name}-${a.timestamp}`));
+        const prevKeys = new Set(prev.map((a) => `${a.api_name || 'unknown'}-${a.timeStamp || a.timestamp || a._id || ''}`));
         const newAlerts = fetchedAlerts.filter(
-          (a) => !prevKeys.has(`${a.api_name}-${a.timestamp}`)
+          (a) => !prevKeys.has(`${a.api_name || 'unknown'}-${a.timeStamp || a.timestamp || a._id || ''}`)
         );
         
         if (newAlerts.length === 0) return prev;
@@ -131,7 +154,7 @@ export default function DashboardPage() {
 
   const severityCounts = SEVERITY_CARDS.reduce(
     (acc, { key }) => {
-      acc[key] = accumulatedAlerts.filter((a) => a.severity.toLowerCase() === key).length;
+      acc[key] = accumulatedAlerts.filter((a) => getAlertSeverity(a) === key).length;
       return acc;
     },
     {} as Record<Severity, number>
@@ -245,6 +268,9 @@ export default function DashboardPage() {
                   <TableHead className="font-semibold text-gray-700">
                     Timestamp
                   </TableHead>
+                  <TableHead className="font-semibold text-gray-700 text-right pr-5">
+                    Action
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -255,7 +281,7 @@ export default function DashboardPage() {
                 {!isLoading && activeAlerts.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={7}
                       className="text-center py-16 text-gray-400"
                     >
                       <div className="flex flex-col items-center gap-2">
@@ -270,57 +296,159 @@ export default function DashboardPage() {
 
                 {/* Data rows */}
                 {!isLoading &&
-                  activeAlerts.map((alert, index) => (
-                    <TableRow
-                      key={`${alert.api_name}-${alert.timestamp}-${index}`}
-                      className={cn(
-                        "transition-colors hover:bg-gray-50",
-                        alert.severity.toLowerCase() === "critical" && "bg-red-50/30"
-                      )}
-                    >
-                      <TableCell className="font-medium text-gray-900 pl-5">
-                        {alert.api_name}
-                      </TableCell>
-                      <TableCell>
-                        <SeverityBadge severity={alert.severity.toLowerCase() as Severity} />
-                      </TableCell>
-                      <TableCell className="max-w-xs text-gray-600 text-sm">
-                        <p className="truncate" title={alert.ai_alert_message}>
-                          {alert.ai_alert_message}
-                        </p>
-                      </TableCell>
-                      <TableCell className="text-gray-700 tabular-nums">
-                        {alert.response_time_ms?.toLocaleString()}
-                        <span className="text-gray-400 text-xs ml-1">ms</span>
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-mono font-semibold",
-                            alert.status_code >= 500
-                              ? "bg-red-100 text-red-700"
-                              : alert.status_code >= 400
-                                ? "bg-orange-100 text-orange-700"
-                                : alert.status_code >= 200
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-gray-100 text-gray-600"
+                  activeAlerts.map((alert, index) => {
+                    const sev = getAlertSeverity(alert);
+                    const ts = alert.timeStamp || alert.timestamp;
+                    const msg = alert.alert_messages || alert.ai_alert_message || alert.alert_message;
+                    return (
+                      <TableRow
+                        key={`${alert.api_name || 'unknown'}-${ts || alert._id || ''}-${index}`}
+                        className={cn(
+                          "transition-colors hover:bg-gray-50",
+                          sev === "critical" && "bg-red-50/30"
+                        )}
+                      >
+                        <TableCell className="font-medium text-gray-900 pl-5">
+                          {alert.api_name || <span className="text-gray-400 italic">Unknown API</span>}
+                        </TableCell>
+                        <TableCell>
+                          <SeverityBadge severity={sev} />
+                        </TableCell>
+                        <TableCell className="max-w-xs text-gray-600 text-sm">
+                          <p className="truncate" title={msg || "No message provided"}>
+                            {msg || <span className="text-gray-400 italic">No message provided</span>}
+                          </p>
+                        </TableCell>
+                        <TableCell className="text-gray-700 tabular-nums">
+                          {alert.response_time_ms != null ? (
+                            <>
+                              {alert.response_time_ms.toLocaleString()}
+                              <span className="text-gray-400 text-xs ml-1">ms</span>
+                            </>
+                          ) : (
+                            <span className="text-gray-400">-</span>
                           )}
-                        >
-                          {alert.status_code}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-gray-500 text-sm whitespace-nowrap">
-                        <span title={formatRelativeTime(alert.timestamp)}>
-                          {formatTimestamp(alert.timestamp)}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell>
+                          {alert.status_code != null ? (
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-mono font-semibold",
+                                alert.status_code >= 500
+                                  ? "bg-red-100 text-red-700"
+                                  : alert.status_code >= 400
+                                    ? "bg-orange-100 text-orange-700"
+                                    : alert.status_code >= 200
+                                      ? "bg-green-100 text-green-700"
+                                      : "bg-gray-100 text-gray-600"
+                              )}
+                            >
+                              {alert.status_code}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-gray-500 text-sm whitespace-nowrap">
+                          {ts ? (
+                            <span title={formatRelativeTime(ts)}>
+                              {formatTimestamp(ts)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right pr-5">
+                          <Button variant="outline" size="sm" onClick={() => setSelectedAlert(alert)}>
+                            View
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
               </TableBody>
             </Table>
           </div>
         </Card>
       </div>
+
+      {/* Alert Details Modal */}
+      {selectedAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-opacity">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Activity size={18} className="text-indigo-500" />
+                Alert Details
+              </h2>
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setSelectedAlert(null)}>
+                <X size={16} />
+              </Button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">API Name</p>
+                  <p className="font-semibold text-gray-900">{selectedAlert.api_name || "Unknown"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Severity</p>
+                  <SeverityBadge severity={getAlertSeverity(selectedAlert)} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Timestamp</p>
+                  <p className="text-gray-900">
+                    {selectedAlert.timeStamp || selectedAlert.timestamp 
+                      ? formatTimestamp((selectedAlert.timeStamp || selectedAlert.timestamp) as string) 
+                      : "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Response Time</p>
+                  <p className="text-gray-900">
+                    {selectedAlert.response_time_ms != null ? `${selectedAlert.response_time_ms} ms` : "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Status Code</p>
+                  <p className="text-gray-900 font-mono">
+                    {selectedAlert.status_code != null ? selectedAlert.status_code : "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium text-gray-500 mb-2">Alert Message</p>
+                <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 leading-relaxed border border-gray-100">
+                  {selectedAlert.alert_messages || selectedAlert.ai_alert_message || selectedAlert.alert_message || "No specific message provided."}
+                </div>
+              </div>
+
+              {selectedAlert.issues && selectedAlert.issues.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-500 mb-2">Detected Issues</p>
+                  <div className="space-y-2">
+                    {selectedAlert.issues.map((issue, idx) => (
+                      <div key={idx} className="bg-gray-50 p-3 rounded-md border border-gray-100 flex items-start gap-3">
+                        <ShieldAlert size={16} className={cn("mt-0.5", issue.severity === 'critical' ? 'text-red-500' : issue.severity === 'high' ? 'text-orange-500' : 'text-yellow-500')} />
+                        <div>
+                          <p className="text-sm font-medium capitalize text-gray-900">{issue.type?.replace(/_/g, ' ')}</p>
+                          <p className="text-xs text-gray-500 mt-0.5 capitalize">Severity: {issue.severity}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+              <Button onClick={() => setSelectedAlert(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
