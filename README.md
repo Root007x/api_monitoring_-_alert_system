@@ -64,4 +64,25 @@ If your local or webhook URLs change, edit the following file:
 
 ## 🛠️ Tech Stack
 - **Frontend:** Next.js (App Router), Tailwind CSS v4, Lucide Icons.
-- **Backend:** Node.js, Express, Mongoose.
+---
+
+## 🤖 n8n Automation (The "Brains")
+
+This project includes a powerful n8n workflow that acts as the monitoring engine. It handles data processing, AI analysis, and notifications.
+
+### 🧩 How the Workflow Works:
+1. **Webhook Receiver:** Listens for incoming monitoring data from your APIs.
+2. **Python Logic:** Analyzes the data for 3 specific issues:
+   - **High Latency:** Over 3000ms.
+   - **Error Status:** Status codes 500 or higher.
+   - **No Data:** When an API returns empty records.
+3. **AI Analysis (GPT-4o Mini):** If an issue is found, an AI generates a human-friendly explanation of the problem.
+4. **Database Storage:** Saves the alert details (API name, issues, AI message, and timestamp) into your MongoDB.
+5. **Email Alerts:** Automatically sends a professional email notification to your inbox.
+
+### 📥 How to Import to n8n:
+1. Open your n8n instance.
+2. Create a new workflow.
+3. Open the file: `n8n/api_monitor_n8n_automation.json`.
+4. Copy the entire content and **paste** it directly into your n8n canvas.
+5. Update your **Credentials** (MongoDB and Gmail) within the nodes.
